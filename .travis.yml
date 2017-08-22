@@ -42,13 +42,13 @@ env:
       CASSANDRA=3.9
 
 before_install:
-  - source .ci/setup_env.sh
+  - source .ci/setup_env.sh &> setup.log || (cat setup.log && exit 1)
 
 install:
-  - make dev
+  - make dev &> install.log || (cat install.log && exit 1)
 
 script:
-  - .ci/run_tests.sh
+  - .ci/run_tests.sh &> tests.log || (cat tests.log && exit 1)
 
 cache:
   apt: true
