@@ -15,6 +15,8 @@ local ipairs = ipairs
 
 local _M = require("kong.dao.db").new_db("cassandra")
 
+local is_cli = package.loaded["kong_cli"]
+
 -- expose cassandra binding serializers
 -- ex: cassandra.uuid('')
 _M.cassandra = cassandra
@@ -56,10 +58,10 @@ function _M.new(kong_config)
     verify = kong_config.cassandra_ssl_verify,
     cafile = kong_config.lua_ssl_trusted_certificate,
     lock_timeout = 30,
-    silent = ngx.IS_CLI,
+    silent = is_cli,
   }
 
-  if ngx.IS_CLI then
+  if is_cli then
     local policy = require("resty.cassandra.policies.reconnection.const")
     cluster_options.reconn_policy = policy.new(100)
   end

@@ -20,8 +20,8 @@ return function(options)
   }
 
   if options.cli then
-    ngx.IS_CLI = true
-    ngx.exit = function() end
+    package.loaded["kong_cli"] = true
+    ngx.exit = function() end -- luacheck: ignore
   end
 
 
@@ -60,7 +60,7 @@ return function(options)
     local get_phase= ngx.get_phase
     local ngx_sleep = ngx.sleep
     local alternative_sleep = require("socket").sleep
-    ngx.sleep = function(s)
+    ngx.sleep = function(s) -- luacheck: ignore
       if get_phase() == "init_worker" then
         ngx.log(ngx.WARN, "executing a blocking 'sleep' (", s, " seconds)")
         return alternative_sleep(s)
