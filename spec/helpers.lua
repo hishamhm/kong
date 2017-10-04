@@ -912,6 +912,7 @@ local function wait_pid(pid_path, timeout, is_retry)
         return
       end
     until ngx.now() >= max_time
+    ngx.log(ngx.ERR, "wait_pid timed out!")
     if is_retry then
       return
     end
