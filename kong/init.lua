@@ -289,6 +289,17 @@ function Kong.balancer()
     local previous_try = tries[addr.try_count - 1]
     previous_try.state, previous_try.code = get_last_failure()
 
+    local address = ctx.balancer_address
+
+    -- Report HTTP status for health checks
+    if address and address.balancer then
+print("REPORTING HEALTH VIA BALANCER")
+      local ipaddr = address.ip
+      local port = address.port
+      local status = ngx.status
+      address.balancer.__healthchecker:report_http_status(ipaddr, port, status, "passive")
+    end
+
     local ok, err = balancer_execute(addr)
     if not ok then
       ngx.log(ngx.ERR, "failed to retry the dns/balancer resolver for ",
@@ -383,6 +394,7 @@ function Kong.log()
 end
 
 function Kong.handle_error()
+print("KONG ERROR HANDLER")
   return kong_error_handlers(ngx)
 end
 

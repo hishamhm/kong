@@ -1,8 +1,12 @@
 local pl_tablex = require "pl.tablex"
 local responses = require "kong.tools.responses"
 local singletons = require "kong.singletons"
-local dns_client = require "resty.dns.client"  -- due to startup/require order, cannot use the one from 'singletons' here
 local ring_balancer = require "resty.dns.balancer"
+local healthcheck = require "resty.healthcheck"
+
+-- due to startup/require order, cannot use the ones from 'singletons' here
+local dns_client = require "resty.dns.client"
+local worker_events = require "resty.worker.events"
 
 local toip = dns_client.toip
 local log = ngx.log
@@ -144,6 +148,71 @@ local function apply_history(rb, history, start)
   return true
 end
 
+
+local function ring_balancer_callback(balancer, action, ip, port, hostname)
+  local healthchecker = balancer.__healthchecker
+  if action == "added" then
+    healthchecker:add_target(ip, port, hostname)
+  elseif action == "removed" then
+    healthchecker:remove_target(ip, port)
+  end
+end
+
+
+local function create_balancer(upstream)
+  local balancer, err = ring_balancer.new({
+      wheelSize = upstream.slots,
+      order = upstream.orderlist,
+      dns = dns_client,
+    })
+  if not balancer then
+    return balancer, err
+  end
+
+  -- NOTE: we're inserting a foreign entity in the balancer, to keep track of
+  -- target-history changes!
+  balancer.__targets_history = {}
+
+  local healthchecker, err = healthcheck.new({
+    name = upstream.name,
+    shm_name = "kong_healthchecks",
+    checks = {
+      active = {
+        healthy = {
+          interval = 0 -- start disabled
+        },
+        unhealthy = {
+          interval = 0 -- start disabled
+        }
+      }
+    }
+  })
+  if not healthchecker then
+    ngx.log(ngx.ERR, "Error creating health checker: ", err)
+    return balancer
+  end
+
+  local healthchecker_callback = function(tgt, event)
+    if event == healthchecker.events.healthy then
+      balancer:setPeerStatus(true, tgt.ip, tgt.port, tgt.hostname)
+    elseif event == healthchecker.events.unhealthy then
+      balancer:setPeerStatus(false, tgt.ip, tgt.port, tgt.hostname)
+    end
+  end
+
+  -- Register event using a weak-reference in worker-events,
+  -- and attach lifetime of callback to that of the balancer.
+  worker_events.register_weak(healthchecker_callback, healthchecker.EVENT_SOURCE)
+  balancer.__healthchecker_callback = healthchecker_callback
+
+  -- We are attaching a health checker to the balancer, so that the lifetime
+  -- of the healthchecker is based on that of the balancer.
+  balancer.__healthchecker = healthchecker
+  ngx.log(ngx.ERR, "CHECKER: ", tostring(balancer.__healthchecker))
+  return balancer
+end
+
+
 -- looks up a balancer for the target.
 -- @param target the table with the target details
 -- @return balancer if found, or `false` if not found, or nil+error on error
@@ -171,22 +240,15 @@ local get_balancer = function(target)
     return nil, err
   end
 
+  local new_balancer = false
   local balancer = balancers[upstream.name]
   if not balancer then
     -- no balancer yet (or invalidated) so create a new one
-    balancer, err = ring_balancer.new({
-        wheelSize = upstream.slots,
-        order = upstream.orderlist,
-        dns = dns_client,
-      })
-
+    new_balancer = true
+    balancer, err = create_balancer(upstream)
     if not balancer then
       return balancer, err
     end
-
-    -- NOTE: we're inserting a foreign entity in the balancer, to keep track of
-    -- target-history changes!
-    balancer.__targets_history = {}
     balancers[upstream.name] = balancer
   end
 
@@ -220,19 +282,33 @@ local get_balancer = function(target)
       -- TODO: ideally we would undo the last ones until we're equal again
       -- and can replay changes, but not supported by ring-balancer yet.
       -- for now; create a new balancer from scratch
-      balancer, err = ring_balancer.new({
-          wheelSize = upstream.slots,
-          order = upstream.orderlist,
-          dns = dns_client,
-        })
+      new_balancer = true
+      balancer, err = create_balancer(upstream)
       if not balancer then
         return balancer, err
       end
-
-      balancer.__targets_history = {}
-      balancers[upstream.name] = balancer  -- overwrite our existing one
+      balancers[upstream.name] = balancer
       apply_history(balancer, targets_history, 1)
     end
+  end
+
+  if new_balancer then
+    -- populate health checker
+    for weight, addr, host in balancer:addressIter() do
+      if weight > 0 then
+        local ipaddr = addr.ip
+        local port = addr.port
+        local hostname = host.hostname
+        balancer.__healthchecker:add_target(ipaddr, port, hostname)
+        -- Get existing health status which may have been initialized
+        -- with data from another worker, and apply to the new balancer.
+        local status = balancer.__healthchecker:get_target_status(ipaddr, port)
+        balancer:setPeerStatus(status, ipaddr, port, hostname)
+      end
+    end
+
+    -- only enable the callback after the target history has been replayed.
+    balancer:setCallback(ring_balancer_callback)
   end
 
   return balancer
@@ -325,6 +401,8 @@ return {
   invalidate_balancer = invalidate_balancer,
 
   -- ones below are exported for test purposes
+  _create_balancer = create_balancer,
+  _get_balancer = get_balancer,
   _load_upstreams_dict_into_memory = load_upstreams_dict_into_memory,
   _load_upstream_into_memory = load_upstream_into_memory,
   _load_targets_into_memory = load_targets_into_memory,

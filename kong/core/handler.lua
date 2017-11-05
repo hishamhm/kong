@@ -488,6 +488,16 @@ return {
   log = {
     after = function(ctx)
       reports.log()
+      local address = ctx.balancer_address
+
+      -- Report HTTP status for health checks
+      if address and address.balancer and address.ip then
+print("REPORTING HEALTH VIA LOG")
+        local ip = address.ip
+        local port = address.port
+        local status = ngx.status
+        address.balancer.__healthchecker:report_http_status(ip, port, status, "passive")
+      end
     end
   }
 }

@@ -122,10 +122,9 @@ local function send_response(status_code)
       content = response_default_content[status_code](content)
     end
 
-    local encoded, err
     if content then
-      encoded, err = cjson.encode(type(content) == "table" and content or
-                                  {message = content})
+      local tbl = type(content) == "table" and content or {message = content}
+      local encoded, err = cjson.encode(tbl)
       if not encoded then
         ngx.log(ngx.ERR, "[admin] could not encode value: ", err)
       end
