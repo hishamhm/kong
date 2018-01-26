@@ -46,11 +46,14 @@ local function flush_redis()
   red:close()
 end
 
-for i, policy in ipairs({"local", "cluster", "redis"}) do
-  describe("#ci Plugin: rate-limiting (access) with policy: "..policy, function()
+for _, policy in ipairs({"local"}) do
+  describe("Plugin: rate-limiting (access) with policy: #" .. policy, function()
+    local plugin6, api6
     setup(function()
       helpers.kill_all()
-      flush_redis()
+      if policy == "redis" then
+        flush_redis()
+      end
       helpers.dao:drop_schema()
       assert(helpers.dao:run_migrations())
 
@@ -175,6 +178,25 @@ for i, policy in ipairs({"local", "cluster", "redis"}) do
         }
       })
 
+      api6 = assert(helpers.dao.apis:insert {
+        name         = "api-6",
+        hosts        = { "test6.com" },
+        upstream_url = "http://mockbin.com",
+      })
+      plugin6 = assert(helpers.dao.plugins:insert {
+        name   = "rate-limiting",
+        api_id = api6.id,
+        config = {
+          policy              = policy,
+          second              = 3,
+          fault_tolerant      = false,
+          redis_host          = REDIS_HOST,
+          redis_port          = REDIS_PORT,
+          redis_password      = REDIS_PASSWORD,
+          redis_database      = REDIS_DATABASE,
+        },
+      })
+
       assert(helpers.start_kong())
     end)
 
@@ -223,6 +245,75 @@ for i, policy in ipairs({"local", "cluster", "redis"}) do
         local body = assert.res_status(429, res)
         local json = cjson.decode(body)
         assert.same({ message = "API rate limit exceeded" }, json)
+      end)
+
+      it("#only handles updating the limit", function()
+
+        -- Wait for the next second
+        ngx.update_time()
+        local t = math.floor(ngx.now())
+        repeat
+          ngx.update_time()
+          local t2 = math.floor(ngx.now())
+        until t ~= t2
+        for i = 1, 3 do
+print("----------------- ", i)
+          local pc = helpers.proxy_client()
+          local res = assert(pc:send {
+            method = "GET",
+            path = "/status/200",
+            headers = {
+              ["Host"] = "test6.com"
+            }
+          })
+          assert.res_status(200, res)
+for k,v in pairs(res.headers) do
+  print(k," - ", v)
+end
+          assert.are.same(3, tonumber(res.headers["x-ratelimit-limit-second"]))
+          assert.are.same(3 - i, tonumber(res.headers["x-ratelimit-remaining-second"]))
+          pc:close()
+
+          ngx.sleep(SLEEP_TIME / 20) -- Wait for async timer to increment the limit
+        end
+
+        local ac = helpers.admin_client()
+        local res = assert(ac:send {
+          method = "PATCH",
+          path = "/plugins/" .. plugin6.id,
+          headers = {
+            ["Content-Type"] = "application/json"
+          },
+          body = {
+            id = plugin6.id,
+            name   = "rate-limiting",
+            api_id = api6.id,
+            config           = {
+              second         = 100,
+              policy         = policy,
+              redis_host     = REDIS_HOST,
+              redis_port     = REDIS_PORT,
+              redis_password = REDIS_PASSWORD,
+              redis_database = REDIS_DATABASE,
+            },
+          }
+        })
+        assert.same(200, res.status)
+
+        local res = assert(helpers.proxy_client():send {
+          method = "GET",
+          path = "/status/200",
+          headers = {
+            ["Host"] = "test6.com"
+          }
+        })
+
+        assert.res_status(200, res)
+for k,v in pairs(res.headers) do
+  print(k," - ", v)
+end
+        assert.are.same(100, tonumber(res.headers["x-ratelimit-limit-second"]))
+        assert.are.same(96, tonumber(res.headers["x-ratelimit-remaining-second"]))
       end)
 
       it("handles multiple limits", function()
