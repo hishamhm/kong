@@ -47,7 +47,9 @@ describe("kong start/stop", function()
 
     assert.falsy(helpers.path.exists("foobar"))
     assert(helpers.kong_exec("start --prefix foobar", {
-      pg_database = helpers.test_conf.pg_database
+      database = helpers.test_conf.database,
+      pg_database = helpers.test_conf.pg_database,
+      cassandra_keyspace = helpers.test_conf.cassandra_keyspace,
     }))
     assert.truthy(helpers.path.exists("foobar"))
   end)
@@ -64,11 +66,14 @@ describe("kong start/stop", function()
       assert.matches("[debug] database = ", stdout, nil, true)
     end)
     it("prints ENV variables when detected", function()
+      local db = helpers.test_conf.database
       local _, _, stdout = assert(helpers.kong_exec("start --vv --conf " .. helpers.test_conf_path, {
-        database = "postgres",
+        database = db,
+        pg_database = helpers.test_conf.pg_database,
+        cassandra_keyspace = helpers.test_conf.cassandra_keyspace,
         admin_listen = "127.0.0.1:8001"
       }))
-      assert.matches('KONG_DATABASE ENV found with "postgres"', stdout, nil, true)
+      assert.matches('KONG_DATABASE ENV found with "' .. db .. '"', stdout, nil, true)
       assert.matches('KONG_ADMIN_LISTEN ENV found with "127.0.0.1:8001"', stdout, nil, true)
     end)
     it("prints config in alphabetical order", function()
@@ -154,7 +159,9 @@ describe("kong start/stop", function()
     end)
     it("stop inexistent prefix", function()
       assert(helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, {
-        pg_database = helpers.test_conf.pg_database
+        database = helpers.test_conf.database,
+        pg_database = helpers.test_conf.pg_database,
+        cassandra_keyspace = helpers.test_conf.cassandra_keyspace,
       }))
 
       local ok, stderr = helpers.kong_exec("stop --prefix inexistent")
@@ -163,11 +170,15 @@ describe("kong start/stop", function()
     end)
     it("notifies when Kong is already running", function()
       assert(helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, {
-        pg_database = helpers.test_conf.pg_database
+        database = helpers.test_conf.database,
+        pg_database = helpers.test_conf.pg_database,
+        cassandra_keyspace = helpers.test_conf.cassandra_keyspace,
       }))
 
       local ok, stderr = helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, {
-        pg_database = helpers.test_conf.pg_database
+        database = helpers.test_conf.database,
+        pg_database = helpers.test_conf.pg_database,
+        cassandra_keyspace = helpers.test_conf.cassandra_keyspace,
       })
       assert.False(ok)
       assert.matches("Kong is already running in " .. helpers.test_conf.prefix, stderr, nil, true)
@@ -190,13 +201,15 @@ describe("kong start/stop", function()
     it("should not stop Kong if already running in prefix", function()
       local kill = require "kong.cmd.utils.kill"
 
-      assert(helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, {
-        pg_database = helpers.test_conf.pg_database
-      }))
+      local env = {
+        database = helpers.test_conf.database,
+        pg_database = helpers.test_conf.pg_database,
+        cassandra_keyspace = helpers.test_conf.cassandra_keyspace,
+      }
 
-      local ok, stderr = helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, {
-        pg_database = helpers.test_conf.pg_database
-      })
+      assert(helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, env))
+
+      local ok, stderr = helpers.kong_exec("start --prefix " .. helpers.test_conf.prefix, env)
       assert.False(ok)
       assert.matches("Kong is already running in " .. helpers.test_conf.prefix, stderr, nil, true)
 

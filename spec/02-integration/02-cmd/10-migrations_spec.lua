@@ -6,6 +6,9 @@ local dao = helpers.dao -- postgreSQL DAO (faster to test this command)
 
 
 describe("kong migrations", function()
+
+  local db_update_propagation = helpers.test_conf.database == "cassandra" and 3 or 0
+
   describe("reset", function()
     before_each(function()
       assert(dao:run_migrations())
@@ -25,8 +28,8 @@ describe("kong migrations", function()
 
       for _, answer in ipairs(answers) do
         local cmd = string.format(helpers.unindent [[
-          echo %s | %s migrations reset -c %s
-        ]], answer, helpers.bin_path, helpers.test_conf_path)
+          echo %s | KONG_DB_UPDATE_PROPAGATION=%d %s migrations reset -c %s
+        ]], answer, db_update_propagation, helpers.bin_path, helpers.test_conf_path)
 
         local ok, _, stdout, stderr = pl_utils.executeex(cmd)
         assert.is_true(ok)
@@ -48,8 +51,8 @@ describe("kong migrations", function()
 
       for _, answer in ipairs(answers) do
         local cmd = string.format(helpers.unindent [[
-          echo %s | %s migrations reset -c %s
-        ]], answer, helpers.bin_path, helpers.test_conf_path)
+          echo %s | KONG_DB_UPDATE_PROPAGATION=%d %s migrations reset -c %s
+        ]], answer, db_update_propagation, helpers.bin_path, helpers.test_conf_path)
         local ok, _, stdout, stderr = pl_utils.executeex(cmd)
         assert.is_true(ok)
         assert.equal("", stderr)
@@ -61,7 +64,9 @@ describe("kong migrations", function()
 
     it("runs non-interactively with --yes", function()
       local ok, stderr, stdout = helpers.kong_exec("migrations reset --yes -c " ..
-                                                   helpers.test_conf_path)
+                                                   helpers.test_conf_path, {
+        db_update_propagation = db_update_propagation,
+      })
       assert.is_true(ok)
       assert.is_equal("", stderr)
       assert.not_matches("Are you sure? This operation is irreversible. [Y/n]",
@@ -71,7 +76,9 @@ describe("kong migrations", function()
 
     it("runs non-interactively with -y", function()
       local ok, stderr, stdout = helpers.kong_exec("migrations reset -y -c " ..
-                                                   helpers.test_conf_path)
+                                                   helpers.test_conf_path, {
+        db_update_propagation = db_update_propagation,
+      })
       assert.is_true(ok)
       assert.is_equal("", stderr)
       assert.not_matches("Are you sure? This operation is irreversible. [Y/n]",
