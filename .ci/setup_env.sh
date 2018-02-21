@@ -85,11 +85,13 @@ eval `luarocks path`
 # -------------------------------------
 # Install ccm & setup Cassandra cluster
 # -------------------------------------
-if [[ "$TEST_SUITE" != "unit" ]] && [[ "$TEST_SUITE" != "lint" ]]; then
-  pip install --user PyYAML six ccm &> build.log || (cat build.log && exit 1)
-  ccm create test -v $CASSANDRA -n 1 -d
-  ccm start -v
-  ccm status
+if [[ "$KONG_TEST_DATABASE" = "cassandra" ]]; then
+  if [[ "$TEST_SUITE" != "unit" ]] && [[ "$TEST_SUITE" != "lint" ]]; then
+    pip install --user PyYAML six ccm &> build.log || (cat build.log && exit 1)
+    ccm create test -v $CASSANDRA -n 1 -d
+    ccm start -v
+    ccm status
+  fi
 fi
 
 nginx -V

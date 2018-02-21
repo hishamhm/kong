@@ -2,10 +2,14 @@
 set -e
 
 export BUSTED_ARGS="-o gtest -v --exclude-tags=flaky,ipv6"
-export TEST_CMD="bin/busted $BUSTED_ARGS"
+export TEST_CMD="bin/busted $BUSTED_ARGS --exclude-tags=`[[ "$KONG_TEST_DATABASE" = cassandra ]] && echo postgres || echo cassandra`"
 
-createuser --createdb kong
-createdb -U kong kong_tests
+if [[ "$KONG_TEST_DATABASE" = postgres ]]; then
+  if [[ "$TEST_SUITE" != "unit" ]] && [[ "$TEST_SUITE" != "lint" ]]; then
+    createuser --createdb kong
+    createdb -U kong kong_tests
+  fi
+fi
 
 if [ "$TEST_SUITE" == "lint" ]; then
     make lint

@@ -85,7 +85,7 @@ end
 ---------------
 -- Conf and DAO
 ---------------
-local conf = assert(conf_loader(TEST_CONF_PATH))
+local conf = assert(conf_loader(TEST_CONF_PATH, { database = os.getenv("KONG_DATABASE") }))
 local dao = assert(DAOFactory.new(conf))
 -- make sure migrations are up-to-date
 
