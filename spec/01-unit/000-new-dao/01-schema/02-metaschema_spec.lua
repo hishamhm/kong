@@ -408,7 +408,7 @@ describe("metaschema", function()
       }
       local ok, err = MetaSchema:validate(s)
       assert.falsy(ok)
-      assert.match("must be a string", err.subschema_key)
+      assert.match("must resolve to a string", err.subschema_key)
     end)
 
     it("schema can define abstract fields", function()

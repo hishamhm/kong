@@ -163,12 +163,10 @@ for _, strategy in helpers.each_strategy() do
               assert.same({
                 code    = Errors.codes.SCHEMA_VIOLATION,
                 name    = "schema violation",
-                message = "2 schema violations " ..
-                          "(protocols: expected one of: http, https; " ..
-                          "service: required field missing)",
+                message = "schema violation " ..
+                          "(protocols: unknown type: foo)",
                 fields = {
-                  protocols = "expected one of: http, https",
-                  service   = "required field missing",
+                  protocols = "unknown type: foo",
                 }
               }, cjson.decode(body))
             end

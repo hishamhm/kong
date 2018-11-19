@@ -82,6 +82,9 @@ function DB.new(kong_config, strategy)
       end
       schemas[entity_name] = entity
     end
+
+    local route_types = require("kong.db.schema.entities.route_types")
+    route_types.add_route_subschemas(schemas.routes)
   end
 
   -- load strategy

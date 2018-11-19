@@ -234,7 +234,7 @@ end
 local function serialize_arg(field, arg)
   local serialized_arg
 
-  if arg == null then
+  if arg == null or arg == nil then
     serialized_arg = cassandra.null
 
   elseif field.uuid then

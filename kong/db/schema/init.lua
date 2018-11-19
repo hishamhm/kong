@@ -836,8 +836,8 @@ function Schema:validate_field(field, value)
   for _, k in ipairs(Schema.validators_order) do
     if field[k] then
       local ok, err = self.validators[k](value, field[k], field)
-      if field[k].err then
-        return nil, field[k].err:format(value)
+      if field.err then
+        return nil, field.err:format(value)
       end
       if not ok then
         if not err then
@@ -917,7 +917,7 @@ local function compatible_fields(f1, f2)
     return true
   end
   if t1 == "array" or t1 == "set" then
-    return f1.elements.type == f2.elements.type
+    return f1.len_eq == 0 or f2.len_eq == 0 or f1.elements.type == f2.elements.type
   end
   if t1 == "map" then
     return f1.keys.type == f2.keys.type and f1.values.type == f2.values.type
@@ -928,9 +928,13 @@ end
 
 local function get_subschema(self, input)
   if self.subschemas and self.subschema_key then
-    local subschema = self.subschemas[input[self.subschema_key]]
+    local key = input[self.subschema_key]
+    if type(key) == "table" then
+      key = key[1]
+    end
+    local subschema = self.subschemas[key]
     if subschema then
-      return self.subschemas[input[self.subschema_key]]
+      return self.subschemas[key]
     end
   end
   return nil
@@ -1525,9 +1529,15 @@ function Schema:validate(input, full_check)
     -- If we can't determine the subschema, do not validate any further
     local key = input[self.subschema_key]
     if key == null or key == nil then
+      key = self.fields[self.subschema_key].default
+    end
+    if key == null or key == nil then
       return nil, {
         [self.subschema_key] = validation_errors.REQUIRED
       }
+    end
+    if type(key) == "table" then
+      key = key[1]
     end
     if not (self.subschemas and self.subschemas[key]) then
       local errmsg = self.subschema_error or validation_errors.SUBSCHEMA_UNKNOWN
@@ -1636,9 +1646,9 @@ function Schema:each_field(values)
       return nil
     end
     local key = next(item)
-    local field = resolve_field(self, key, item[key], subschema)
+    local field, err = resolve_field(self, key, item[key], subschema)
     i = i + 1
-    return key, field
+    return key, field, err
   end
 end
 

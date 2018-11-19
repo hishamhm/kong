@@ -47,7 +47,7 @@ local function validate_cidr(ip)
 
   -- It's an error only if the second variable is a string
   if type(err) == "string" then
-    return nil, "invalid cidr range: " .. err
+    return nil, err .. ": " .. ip
   end
 
   return true
@@ -147,6 +147,20 @@ end
 
 
 local typedefs = {}
+
+
+typedefs.empty_set = Schema.define {
+  type = "set",
+  elements = { type = "string" },
+  len_eq = 0,
+}
+
+
+typedefs.empty_array = Schema.define {
+  type = "array",
+  elements = { type = "string" },
+  len_eq = 0,
+}
 
 
 typedefs.http_method = Schema.define {
