@@ -4,7 +4,6 @@ local cjson = require "cjson"
 local utils = require "kong.tools.utils"
 local reports = require "kong.reports"
 local endpoints = require "kong.api.endpoints"
-local arguments = require "kong.api.arguments"
 local singletons = require "kong.singletons"
 
 
@@ -15,6 +14,7 @@ local pairs = pairs
 local get_plugin = endpoints.get_entity_endpoint(kong.db.plugins.schema)
 local put_plugin = endpoints.put_entity_endpoint(kong.db.plugins.schema)
 local delete_plugin = endpoints.delete_entity_endpoint(kong.db.plugins.schema)
+local patch_plugin = endpoints.patch_entity_endpoint(kong.db.plugins.schema)
 
 
 local function before_plugin_for_entity(entity_name, plugin_field)
@@ -33,36 +33,6 @@ local function before_plugin_for_entity(entity_name, plugin_field)
     self.plugin = plugin
 
     self.params.plugins = self.params.id
-  end
-end
-
-
-local function fill_plugin_data(args, plugin)
-  local post = args.post
-
-  post.name = post.name or plugin.name
-
-  -- Only now we can decode the 'config' table for form-encoded values
-  post = arguments.decode(post, kong.db.plugins.schema)
-
-  -- While we're at it, get values for composite uniqueness check
-  post.api = post.api or plugin.api
-  post.route = post.route or plugin.route
-  post.service = post.service or plugin.service
-  post.consumer = post.consumer or plugin.consumer
-
-  args.post = post
-end
-
-
-local patch_plugin
-do
-  local patch_plugin_endpoint = endpoints.patch_entity_endpoint(kong.db.plugins.schema)
-
-  patch_plugin = function(self, db, helpers)
-    local plugin = self.plugin
-    fill_plugin_data(self.args, plugin)
-    return patch_plugin_endpoint(self, db, helpers)
   end
 end
 
@@ -124,30 +94,6 @@ return {
   ["/plugins"] = {
     POST = function(_, _, _, parent)
       return parent(post_process)
-    end,
-  },
-
-  ["/plugins/:plugins"] = {
-    PATCH = function(self, db, helpers, parent)
-      local post = self.args and self.args.post
-
-      -- Read-before-write only if necessary
-      if post and (post.name     == nil or
-                   post.route    == nil or
-                   post.service  == nil or
-                   post.consumer == nil or
-                   post.api      == nil) then
-
-        -- We need the name, otherwise we don't know what type of
-        -- plugin this is and we can't perform *any* validations.
-        local plugin = db.plugins:select({ id = self.params.plugins })
-        if not plugin then
-          return helpers.responses.send_HTTP_NOT_FOUND()
-        end
-
-        fill_plugin_data(self.args, plugin)
-      end
-      return parent()
     end,
   },
 

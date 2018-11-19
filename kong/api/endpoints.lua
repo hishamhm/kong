@@ -348,6 +348,27 @@ local function put_entity_endpoint(schema, foreign_schema, foreign_field_name)
 end
 
 
+local function fill_entity_data(schema, args, entity, subschema_key, cache_key)
+  local post = args.post
+
+  if subschema_key then
+    post[subschema_key] = post[subschema_key] or entity[subschema_key]
+  end
+
+  -- Only now we can decode the 'config' table for form-encoded values
+  post = arguments.decode(post, schema)
+
+  -- While we're at it, get values for cache key, if any
+  if cache_key then
+    for _, k in ipairs(cache_key) do
+      post[k] = post[k] or entity[k]
+    end
+  end
+
+  args.post = post
+end
+
+
 -- Generates admin api patch entity endpoint functions
 --
 -- Examples:
@@ -360,6 +381,45 @@ end
 -- /services/:services
 local function patch_entity_endpoint(schema, foreign_schema, foreign_field_name)
   return not foreign_schema and function(self, db, helpers)
+
+    -- If entity has subschema or cache_key, we might need a read-before-write
+    do
+      local args = self.args
+      local subschema_key = schema.subschema_key
+      local cache_key = schema.cache_key
+      if subschema_key or cache_key then
+        local post = args and args.post
+
+        if post then
+          -- Check if post misses fields that make read-before-write needed:
+          local rbw = false
+          if subschema_key and post[subschema_key] == nil then
+            rbw = true
+          end
+          if rbw == false and cache_key then
+            for _, k in ipairs(cache_key) do
+              if post[k] == nil then
+                rbw = true
+                break
+              end
+            end
+          end
+          if rbw then
+            -- We need the entity, otherwise we don't know what type of
+            -- subschema this is and we can't perform *any* validations.
+            local entity, _, err_t = select_entity(self, db, schema)
+            if err_t then
+              return handle_error(err_t)
+            end
+            if not entity then
+              return helpers.responses.send_HTTP_NOT_FOUND()
+            end
+            fill_entity_data(schema, args, entity, subschema_key, cache_key)
+          end
+        end
+      end
+    end
+
     local entity, _, err_t = update_entity(self, db, schema)
     if err_t then
       return handle_error(err_t)
