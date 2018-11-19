@@ -66,6 +66,7 @@ local field_schema = {
   { abstract = { type = "boolean" }, },
   { generate_admin_api = { type = "boolean" }, },
   { legacy = { type = "boolean" }, },
+  { err = { type = "string" }, },
 }
 
 for _, field in ipairs(validators) do
