@@ -33,6 +33,9 @@ env:
     - KONG_TEST_PG_DATABASE=travis
     - KONG_TEST_PG_USER=postgres
     - JOBS=2
+    - TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST
+    - TRAVIS_BRANCH=$TRAVIS_BRANCH
+    - TRAVIS_PULL_REQUEST_BRANCH=$TRAVIS_PULL_REQUEST_BRANCH
   matrix:
     - KONG_TEST_DATABASE=postgres TEST_SUITE=integration
     - KONG_TEST_DATABASE=cassandra CASSANDRA=2.2 TEST_SUITE=integration
@@ -67,12 +70,9 @@ jobs:
     - stage: lint and unit
       script:
       - luacheck -q .
-      - TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST TRAVIS_PULL_REQUEST_BRANCH=$TRAVIS_PULL_REQUEST_BRANCH TRAVIS_BRANCH=$TRAVIS_BRANCH bin/busted -v -o gtest spec/01-unit
+      - bin/busted -v -o gtest spec/01-unit
       env:
         - KONG_DATABASE=none
-        - TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST
-        - TRAVIS_BRANCH=$TRAVIS_BRANCH
-        - TRAVIS_PULL_REQUEST_BRANCH=$TRAVIS_PULL_REQUEST_BRANCH
     - stage: functional tests
       script: make functional_tests
       if: type=cron
