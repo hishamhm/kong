@@ -67,7 +67,7 @@ jobs:
     - stage: lint and unit
       script:
       - luacheck -q .
-      - bin/busted -v -o gtest spec/01-unit
+      - TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST TRAVIS_BRANCH=$TRAVIS_BRANCH bin/busted -v -o gtest spec/01-unit
       env:
         - KONG_DATABASE=none
     - stage: functional tests

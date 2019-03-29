@@ -209,6 +209,7 @@ local CONF_INFERENCES = {
   admin_ssl_cert_key = {},
   client_ssl_cert = {},
   client_ssl_cert_key = {},
+  my_new_option = {},
 }
 
 
