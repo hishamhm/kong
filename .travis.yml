@@ -3,18 +3,10 @@ sudo: false
 
 language: generic
 
-jdk:
-  - oraclejdk8
-
 notifications:
   email: false
 
-services:
-  - redis-server
-  - docker
-
 addons:
-  postgresql: "9.5"
   apt:
     packages:
       - net-tools
@@ -69,6 +61,14 @@ jobs:
       - bin/busted -v -o gtest spec/01-unit
       env:
         - KONG_DATABASE=none
+    - stage: test
+      jdk:
+        - oraclejdk8
+      services:
+        - redis-server
+        - docker
+      addons:
+        postgresql: "9.5"
     - stage: functional tests
       script: make functional_tests
       if: type=cron
